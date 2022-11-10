@@ -1,39 +1,30 @@
+import threading
+
 from cryptography.hazmat.primitives.asymmetric import ec
-from flask import Flask
-from flask import abort
 
-from acme_project.jws import create_jwk_thumbprint
-
-app = Flask(__name__)
-tokens: list[str] = []
-account_key: ec.EllipticCurvePrivateKey
+from acme_project.acme_client.challenge import Challenge
+from acme_project.http_challenge_server import server
 
 
-@app.route("/.well-known/acme-challenge/<requested_token>")
-def http_challenge(requested_token: str) -> bytes:
-    """The http-01 ACME Identifier Challenge endpoint. Returns the Authorization
-    Key upon request.
+def start_thread(key: ec.EllipticCurvePrivateKey, challenges: list[Challenge]):
+    """Start the HTTP Challenge Server in another thread.
 
     Parameters
     ----------
-    requested_token : str
-        The token that the ACME Server (or someone else) tried to visit.
-
-    Returns
-    -------
-    bytes
-        If the requested token is valid, this contains the Authorization Key for
-        the token.
+    key : ec.EllipticCurvePrivateKey
+        The private account key used for the ACME client.
+    challenges : list[Challenge]
+        The http-01 challenges to put on the HTTP server.
     """
-    global tokens
-    global account_key
+    # Set the tokens and account key globals in the server
+    server.tokens = [challenge.additional["token"] for challenge in challenges]
+    server.account_key = key
 
-    # If the token is not one we should respond to, pretend it's a 404
-    if requested_token not in tokens:
-        abort(404)
-
-    # Construct the key authorization and set that as the return body
-    key_authorization = (
-        requested_token.encode("ASCII") + b"." + create_jwk_thumbprint(account_key)
+    # Run the server in a separate thread, while we signal to the ACME server
+    # and poll its responses.
+    http_challenge_thread = threading.Thread(
+        target=lambda: server.app.run(host="0.0.0.0", port=5002, debug=False),
+        # Quit when main thread exists
+        daemon=True,
     )
-    return key_authorization
+    http_challenge_thread.start()

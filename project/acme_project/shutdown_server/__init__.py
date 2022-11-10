@@ -1,12 +1,14 @@
 import threading
 
-from flask import Flask
-
-app = Flask(__name__)
-shutdown_requested = threading.Event()
+from acme_project.shutdown_server import server
 
 
-@app.route("/shutdown")
-def shutdown() -> bytes:
-    shutdown_requested.set()
-    return b"Shutdown requested!"
+def start_thread():
+    """Start the shutdown HTTP server that flags a semaphore when we receive a
+    request to /shutdown.
+    """
+    shutdown_thread = threading.Thread(
+        target=lambda: server.app.run(host="0.0.0.0", port=5003, debug=False),
+        daemon=True,
+    )
+    shutdown_thread.start()

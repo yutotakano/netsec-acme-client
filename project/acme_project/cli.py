@@ -1,11 +1,8 @@
 import argparse
 import os
-import socketserver
 import sys
-import threading
 
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
 
 from acme_project import dns_challenge_server
 from acme_project import http_challenge_server
@@ -51,79 +48,6 @@ parser.add_argument(
 )
 
 
-def start_http_challenge_server(
-    key: ec.EllipticCurvePrivateKey, challenges: list[Challenge]
-):
-    """Start the HTTP Challenge Server in another thread.
-
-    Parameters
-    ----------
-    key : ec.EllipticCurvePrivateKey
-        The private account key used for the ACME client.
-    challenges : list[Challenge]
-        The http-01 challenges to put on the HTTP server.
-    """
-    # Set the tokens and account key globals in the server
-    http_challenge_server.tokens = [
-        challenge.additional["token"] for challenge in challenges
-    ]
-    http_challenge_server.account_key = key
-
-    # Run the server in a separate thread, while we signal to the ACME server
-    # and poll its responses.
-    http_challenge_thread = threading.Thread(
-        target=lambda: http_challenge_server.app.run(
-            host="0.0.0.0", port=5002, debug=False
-        ),
-        # Quit when main thread exists
-        daemon=True,
-    )
-    http_challenge_thread.start()
-
-
-def start_dns_challenge_server(
-    key: ec.EllipticCurvePrivateKey, a_record: str, challenges: list[Challenge]
-):
-    """Start the DNS Challenge Server in a separate thread.
-
-    Parameters
-    ----------
-    key : ec.EllipticCurvePrivateKey
-        The private account key used by the ACME Client.
-    a_record : str
-        The value to respond with for any A record queries.
-    challenges : list[Challenge]
-        The dns-01 challenges to put on the TXT records.
-    """
-    # Set the tokens and account key globals in the server
-    dns_challenge_server.a_record = a_record
-    dns_challenge_server.tokens = [
-        challenge.additional["token"] for challenge in challenges
-    ]
-    dns_challenge_server.account_key = key
-    dns_challenge_thread = threading.Thread(
-        target=socketserver.ThreadingUDPServer(
-            ("", 10053), dns_challenge_server.DNSServer
-        ).serve_forever,
-        daemon=True,
-    )
-    dns_challenge_thread.start()
-
-
-def start_main_https_server(cert_pem_path: str, key_pem_path: str):
-    """Start the main HTTPS server using the specified SSL certificate files."""
-    main_server_thread = threading.Thread(
-        target=lambda: https_server.app.run(
-            host="0.0.0.0",
-            port=5001,
-            debug=False,
-            ssl_context=(cert_pem_path, key_pem_path),
-        ),
-        daemon=True,
-    )
-    main_server_thread.start()
-
-
 def main() -> None:
     args = parser.parse_args()
     client = ACMEClient(args.dir)
@@ -146,13 +70,13 @@ def main() -> None:
 
     # Start the DNS server regardless of the challenge type, since Pebble needs
     # to resolve the DNS even for the http-01 challenge.
-    start_dns_challenge_server(
+    dns_challenge_server.start_thread(
         client.private_key, args.record, relevant_challenges[parsed_arg_chal_type]
     )
 
     # Temporarily start the HTTP server.
     if args.challenge_type == "http01":
-        start_http_challenge_server(
+        http_challenge_server.start_thread(
             client.private_key, relevant_challenges[parsed_arg_chal_type]
         )
 
@@ -192,18 +116,14 @@ def main() -> None:
     # Start the main server in a separate thread. This allows us to run the
     # shutdown server in the main thread and close the entire program together
     # with all child threads when the shutdown command is issued.
-    start_main_https_server("./https_cert.pem", "./https_key.pem")
+    https_server.start_thread("./https_cert.pem", "./https_key.pem")
 
     # Await the /shutdown request in a separate thread, while in the main thread
     # we wait for the semaphore that the shutdown was requested.
-    shutdown_thread = threading.Thread(
-        target=lambda: shutdown_server.app.run(host="0.0.0.0", port=5003, debug=False),
-        daemon=True,
-    )
-    shutdown_thread.start()
+    shutdown_server.start_thread()
 
     # Block and wait until shutdown is requested
-    shutdown_server.shutdown_requested.wait()
+    shutdown_server.server.shutdown_requested.wait()
 
     # Deactivate the ACME Server account just in case to prevent polluting the
     # account database.
