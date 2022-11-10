@@ -39,32 +39,28 @@ class DNSServer(socketserver.BaseRequestHandler):
                     query_record.q.qname, rtype=query_record.q.qtype, rdata=A(a_record)
                 ),
             )
-        elif query_record.q.qtype == QTYPE.TXT:
-            # Check if the requested name matches any tokens we should be
-            # responding to.
-            print(str(query_record.q.qname))
-            if str(query_record.q.qname) == "_acme-challenge.localhost.":
-                print("onesies")
-                for token in tokens:
-                    key_authorization = (
-                        token.encode("ASCII")
-                        + b"."
-                        + create_jwk_thumbprint(account_key)
-                    )
-                    ka_hash = hashes.Hash(hashes.SHA256())
-                    ka_hash.update(key_authorization)
-                    b64_ka_hash = urlsafe_b64encode(ka_hash.finalize()).strip(b"=")
+        elif query_record.q.qtype == QTYPE.TXT and str(query_record.q.qname).startswith(
+            "_acme-challenge."
+        ):
+            # We don't perform any qname checking here except that it begins
+            # with _acme-challenge, since the actual domain could be arbitrary.
+            print("onesies")
+            for token in tokens:
+                key_authorization = (
+                    token.encode("ASCII") + b"." + create_jwk_thumbprint(account_key)
+                )
+                ka_hash = hashes.Hash(hashes.SHA256())
+                ka_hash.update(key_authorization)
+                b64_ka_hash = urlsafe_b64encode(ka_hash.finalize()).strip(b"=")
 
-                    reply.add_answer(
-                        RR(
-                            rname=query_record.q.qname,
-                            rtype=QTYPE.TXT,
-                            rdata=TXT(b64_ka_hash),
-                        ),
-                    )
+                reply.add_answer(
+                    RR(
+                        rname=query_record.q.qname,
+                        rtype=QTYPE.TXT,
+                        rdata=TXT(b64_ka_hash),
+                    ),
+                )
                 print("donesies")
-            else:
-                print(str(query_record.q.name))
         else:
             print(query_record.q.qtype)
 
