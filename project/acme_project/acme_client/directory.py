@@ -27,7 +27,7 @@ class Directory:
         self.new_account_endpoint = NewAccountEndpoint(dir_dict["newAccount"])
         self.new_order_endpoint = NewOrderEndpoint(dir_dict["newOrder"])
         self.new_authz_endpoint = NewAuthzEndpoint(dir_dict["newOrder"])
-        self.revoke_cert_endpoint = RevokeCertEndpoint(dir_dict["newOrder"])
+        self.revoke_cert_endpoint = RevokeCertEndpoint(dir_dict["revokeCert"])
         self.key_change_endpoint = KeyChangeEndpoint(dir_dict["keyChange"])
         self.metadata = dir_dict["meta"]  # type: ignore
 

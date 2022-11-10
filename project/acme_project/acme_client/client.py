@@ -1,19 +1,20 @@
 import dataclasses
 import json
+from base64 import urlsafe_b64encode
 from time import sleep
 from typing import Any
 
 import urllib3.util.retry as urllib3
+from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from acme_project import csr
 from acme_project.acme_client.account import Account
 from acme_project.acme_client.account import AccountStub
 from acme_project.acme_client.account import MainAccountEndpoint
 from acme_project.acme_client.authorization import Authorization
 from acme_project.acme_client.authorization import GetAuthorizationEndpoint
-from acme_project.acme_client.certificate import Certificate
+from acme_project.acme_client.certificate import create_b64url_csr
 from acme_project.acme_client.challenge import Challenge
 from acme_project.acme_client.directory import Directory
 from acme_project.acme_client.directory import DirectoryEndpoint
@@ -224,7 +225,7 @@ class ACMEClient:
             complete.
         """
         order = self._find_order(order_endpoint)
-        b64url_csr = csr.create_b64url_csr(
+        b64url_csr = create_b64url_csr(
             key=self.certificate_key,
             domains=list(map(lambda x: x["value"], order.identifiers)),
         )
@@ -274,7 +275,9 @@ class ACMEClient:
         # next.
         return updated_order
 
-    def await_certificate(self, order_endpoint: GetOrderEndpoint) -> Certificate:
+    def await_certificate(
+        self, order_endpoint: GetOrderEndpoint
+    ) -> tuple[x509.Certificate, ec.EllipticCurvePrivateKey]:
         # Re-retrieve the Order endpoint, although we may have just received an
         # updated Order when we posted the CSR. This is to reduce coupling and
         # perhaps even allow the server to give time to issue the certificate.
@@ -324,19 +327,36 @@ class ACMEClient:
             nonce=self.last_replay_nonce,
             kid=self.account_endpoint.url,
         )
-        return Certificate(
-            pem_chain=response.text,
-            key=self.certificate_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption(),
-            ).decode("UTF-8"),
-        )
+        return (x509.load_pem_x509_certificate(response.content), self.certificate_key)
 
-    def revoke_certificate(self, cert: Certificate):
+    def revoke_certificate(self, cert: x509.Certificate):
+        """Revoke the specified certificate.
+
+        Parameters
+        ----------
+        cert : Certificate
+            The certificate to be revoked.
+
+        Raises
+        ------
+        Exception
+            When the server fails to revoke the certificate.
+        """
         response = self.directory.revoke_cert_endpoint.retrieve(
             key=self.private_key,
-            payload=json.dumps({"cert": cert.pem_chain, "reason": 0}),
+            payload=json.dumps(
+                {
+                    "certificate": (
+                        urlsafe_b64encode(
+                            cert.public_bytes(encoding=serialization.Encoding.DER)
+                        )
+                        .strip(b"=")
+                        .decode("ASCII")
+                    ),
+                    # The reason=0 indicates that the reason is unspecified
+                    "reason": 0,
+                }
+            ),
             nonce=self.last_replay_nonce,
             kid=self.account_endpoint.url,
         )

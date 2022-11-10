@@ -1,8 +1,10 @@
 import argparse
 import os
 import socketserver
+import sys
 import threading
 
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from acme_project import dns_challenge_server
@@ -100,7 +102,7 @@ def start_dns_challenge_server(
     ]
     dns_challenge_server.account_key = key
     dns_challenge_thread = threading.Thread(
-        target=socketserver.UDPServer(
+        target=socketserver.ThreadingUDPServer(
             ("", 10053), dns_challenge_server.DNSServer
         ).serve_forever,
         daemon=True,
@@ -169,12 +171,19 @@ def main() -> None:
     client.request_certificate(order_endpoint)
 
     # Block and wait for the certificate chain PEM, then download it
-    cert = client.await_certificate(order_endpoint)
+    (cert, cert_key) = client.await_certificate(order_endpoint)
 
-    with open("./https_cert.pem", "w", encoding="UTF-8") as f:
-        f.write(cert.pem_chain)
-    with open("./https_key.pem", "w", encoding="UTF-8") as f:
-        f.write(cert.key)
+    with open("./https_cert.pem", "wb") as f:
+        f.write(cert.public_bytes(encoding=serialization.Encoding.PEM))
+
+    with open("./https_key.pem", "wb") as f:
+        f.write(
+            cert_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
 
     # If the revoke flag is set, immediately revoke it
     if args.revoke:
@@ -189,5 +198,12 @@ def main() -> None:
     # with all child threads when the shutdown command is issued.
     start_main_https_server("./https_cert.pem", "./https_key.pem")
 
-    # Await the /shutdown request
-    shutdown_server.app.run(host="0.0.0.0", port=5003, debug=False)
+    # Await the /shutdown request in a separate thread, while in the main thread
+    # we wait for the semaphore that the shutdown was requested.
+    shutdown_thread = threading.Thread(
+        target=lambda: shutdown_server.app.run(host="0.0.0.0", port=5003, debug=False),
+        daemon=True,
+    )
+    shutdown_thread.start()
+    shutdown_server.shutdown_requested.wait()
+    sys.exit(0)
