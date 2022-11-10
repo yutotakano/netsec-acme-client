@@ -3,4 +3,4 @@ DIRECTORY=$(dirname "$0")
 echo "Changing to ${DIRECTORY}"
 cd  "$DIRECTORY" || exit 1
 
-python3 -m acme_project "$@"
+poetry run python3 -m acme_project "$@"
