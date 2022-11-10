@@ -1,0 +1,17 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/project/.venv/bin/python3",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/project"
+  ],
+  "python.formatting.provider": "black",
+  "isort.args": [
+    "--settings-path=${workspaceFolder}/project"
+  ],
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": true
+    },
+  },
+  "editor.formatOnSave": true
+}
