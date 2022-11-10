@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from acme_project import dns_challenge_server
 from acme_project import http_challenge_server
 from acme_project import https_server
+from acme_project import shutdown_server
 from acme_project.acme_client.challenge import Challenge
 from acme_project.acme_client.client import ACMEClient
 
@@ -107,6 +108,20 @@ def start_dns_challenge_server(
     dns_challenge_thread.start()
 
 
+def start_main_https_server(cert_pem_path: str, key_pem_path: str):
+    """Start the main HTTPS server using the specified SSL certificate files."""
+    main_server_thread = threading.Thread(
+        target=lambda: https_server.app.run(
+            host="0.0.0.0",
+            port=5001,
+            debug=False,
+            ssl_context=(cert_pem_path, key_pem_path),
+        ),
+        daemon=True,
+    )
+    main_server_thread.start()
+
+
 def main() -> None:
     args = parser.parse_args()
     client = ACMEClient(args.dir)
@@ -155,18 +170,24 @@ def main() -> None:
 
     # Block and wait for the certificate chain PEM, then download it
     cert = client.await_certificate(order_endpoint)
+
     with open("./https_cert.pem", "w", encoding="UTF-8") as f:
         f.write(cert.pem_chain)
     with open("./https_key.pem", "w", encoding="UTF-8") as f:
         f.write(cert.key)
 
+    # If the revoke flag is set, immediately revoke it
+    if args.revoke:
+        client.revoke_certificate(cert)
+
     # Deactivate the ACME Server account just in case to prevent polluting the
     # account database.
     client.deactivate()
 
-    https_server.app.run(
-        host="0.0.0.0",
-        port=5001,
-        debug=False,
-        ssl_context=("./https_cert.pem", "./https_key.pem"),
-    )
+    # Start the main server in a separate thread. This allows us to run the
+    # shutdown server in the main thread and close the entire program together
+    # with all child threads when the shutdown command is issued.
+    start_main_https_server("./https_cert.pem", "./https_key.pem")
+
+    # Await the /shutdown request
+    shutdown_server.app.run(host="0.0.0.0", port=5003, debug=False)

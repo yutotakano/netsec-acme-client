@@ -333,6 +333,20 @@ class ACMEClient:
             ).decode("UTF-8"),
         )
 
+    def revoke_certificate(self, cert: Certificate):
+        response = self.directory.revoke_cert_endpoint.retrieve(
+            key=self.private_key,
+            payload=json.dumps({"cert": cert.pem_chain, "reason": 0}),
+            nonce=self.last_replay_nonce,
+            kid=self.account_endpoint.url,
+        )
+
+        # Use replay nonce for future requests
+        self.last_replay_nonce = response.headers["Replay-Nonce"]
+
+        if response.status_code != 200:
+            raise Exception("Server failed to revoke the certificate: " + response.text)
+
     def _retrieve_directory(self, dir_url: str) -> Directory:
         """Retrieve the directory from the specified ACME server directory URL.
 
