@@ -189,10 +189,6 @@ def main() -> None:
     if args.revoke:
         client.revoke_certificate(cert)
 
-    # Deactivate the ACME Server account just in case to prevent polluting the
-    # account database.
-    client.deactivate()
-
     # Start the main server in a separate thread. This allows us to run the
     # shutdown server in the main thread and close the entire program together
     # with all child threads when the shutdown command is issued.
@@ -205,5 +201,11 @@ def main() -> None:
         daemon=True,
     )
     shutdown_thread.start()
+
+    # Block and wait until shutdown is requested
     shutdown_server.shutdown_requested.wait()
+
+    # Deactivate the ACME Server account just in case to prevent polluting the
+    # account database.
+    client.deactivate()
     sys.exit(0)
