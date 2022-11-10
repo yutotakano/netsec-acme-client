@@ -69,7 +69,9 @@ def start_http_challenge_server(
     # Run the server in a separate thread, while we signal to the ACME server
     # and poll its responses.
     http_challenge_thread = threading.Thread(
-        target=lambda: http_challenge_server.app.run(host="::", port=5002, debug=False),
+        target=lambda: http_challenge_server.app.run(
+            host="0.0.0.0", port=5002, debug=False
+        ),
         # Quit when main thread exists
         daemon=True,
     )
@@ -110,29 +112,37 @@ def main() -> None:
     client = ACMEClient(args.dir)
     (order_endpoint, auths) = client.request_order(domains=args.domain)
 
-    challenge_type_rfc = "http-01" if args.challenge_type == "http01" else "dns-01"
+    # Map the argument to the RFC-compatible challenge names
+    parsed_arg_chal_type = "http-01" if args.challenge_type == "http01" else "dns-01"
 
-    # Gather all the challenges relevant to this challenge type, regardless
-    # of the associated identifier/authorization, since we will be using one
-    # single server for all the domains in this assignment.
-    relevant_challenges = [
-        challenge
-        for auth in auths
-        for challenge in auth.challenges
-        if challenge.type == challenge_type_rfc
-    ]
+    # Create a dictionary sorting the http and dns challenges. We don't care
+    # about the identifier/authorization associated with each challenge, since
+    # for this assignment everything is on one server.
+    relevant_challenges: dict[str, list[Challenge]] = {}
+    for chal_type in ["http-01", "dns-01"]:
+        relevant_challenges[chal_type] = [
+            challenge
+            for auth in auths
+            for challenge in auth.challenges
+            if challenge.type == chal_type
+        ]
 
-    # Temporarily start either the HTTP or DNS server until we receive
-    # confirmation that the challenge was validated.
+    # Start the DNS server regardless of the challenge type, since Pebble needs
+    # to resolve the DNS even for the http-01 challenge.
+    start_dns_challenge_server(
+        client.private_key, args.record, relevant_challenges[parsed_arg_chal_type]
+    )
+
+    # Temporarily start the HTTP server.
     if args.challenge_type == "http01":
-        start_http_challenge_server(client.private_key, relevant_challenges)
-    else:
-        start_dns_challenge_server(client.private_key, args.record, relevant_challenges)
+        start_http_challenge_server(
+            client.private_key, relevant_challenges[parsed_arg_chal_type]
+        )
 
     # At this point, we have deployed responses for at least one challenge for
     # every domain identifier. We can request each fulfilled challenge to be
     # validated.
-    for challenge in relevant_challenges:
+    for challenge in relevant_challenges[parsed_arg_chal_type]:
         client.request_challenge_validation(challenge)
 
     # Now since all identifiers are just waiting for validation, we block and
@@ -155,7 +165,7 @@ def main() -> None:
     client.deactivate()
 
     https_server.app.run(
-        host="::",
+        host="0.0.0.0",
         port=5001,
         debug=False,
         ssl_context=("./https_cert.pem", "./https_key.pem"),
