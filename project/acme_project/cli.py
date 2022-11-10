@@ -51,10 +51,12 @@ parser.add_argument(
 def main() -> None:
     args = parser.parse_args()
     client = ACMEClient(args.dir)
-    (order_endpoint, auths) = client.request_order(domains=args.domain)
 
     # Map the argument to the RFC-compatible challenge names
     parsed_arg_chal_type = "http-01" if args.challenge_type == "http01" else "dns-01"
+
+    # Place an order
+    (order_endpoint, auths) = client.request_order(domains=args.domain)
 
     # Create a dictionary sorting the http and dns challenges. We don't care
     # about the identifier/authorization associated with each challenge, since
@@ -113,9 +115,9 @@ def main() -> None:
     if args.revoke:
         client.revoke_certificate(cert)
 
-    # Start the main server in a separate thread. This allows us to run the
-    # shutdown server in the main thread and close the entire program together
-    # with all child threads when the shutdown command is issued.
+    # Start the main server in a separate thread. This allows us to wait for the
+    # shutdown in the main thread and close the entire program together with all
+    # child threads when the shutdown semaphore is set.
     https_server.start_thread("./https_cert.pem", "./https_key.pem")
 
     # Await the /shutdown request in a separate thread, while in the main thread
@@ -128,4 +130,5 @@ def main() -> None:
     # Deactivate the ACME Server account just in case to prevent polluting the
     # account database.
     client.deactivate()
+
     sys.exit(0)
