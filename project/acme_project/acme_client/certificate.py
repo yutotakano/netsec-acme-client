@@ -1,7 +1,5 @@
 from dataclasses import dataclass
 
-from cryptography.hazmat.primitives.asymmetric import ec
-
 from acme_project.acme_client.endpoint import Endpoint
 
 
