@@ -35,16 +35,14 @@ class DNSServer(socketserver.BaseRequestHandler):
             # Unconditionally return the global a_record value for all A record
             # queries, copying the request name as-is into the response.
             reply.add_answer(
-                a=RR(
-                    query_record.q.qname, rtype=query_record.q.qtype, rdata=A(a_record)
-                ),
+                RR(rname=query_record.q.qname, rtype=QTYPE.A, rdata=A(a_record)),
             )
+
         elif query_record.q.qtype == QTYPE.TXT and str(query_record.q.qname).startswith(
             "_acme-challenge."
         ):
             # We don't perform any qname checking here except that it begins
             # with _acme-challenge, since the actual domain could be arbitrary.
-            print("onesies")
             for token in tokens:
                 key_authorization = (
                     token.encode("ASCII") + b"." + create_jwk_thumbprint(account_key)
@@ -60,8 +58,7 @@ class DNSServer(socketserver.BaseRequestHandler):
                         rdata=TXT(b64_ka_hash),
                     ),
                 )
-                print("donesies")
         else:
-            print(query_record.q.qtype)
+            print("Ignoring query for type, " + QTYPE[query_record.q.qtype])
 
         return reply
