@@ -1,9 +1,11 @@
 import argparse
 import os
+import socketserver
 import threading
 
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from acme_project import dns_challenge_server
 from acme_project import http_challenge_server
 from acme_project import https_server
 from acme_project.acme_client.challenge import Challenge
@@ -49,6 +51,15 @@ parser.add_argument(
 def start_http_challenge_server(
     key: ec.EllipticCurvePrivateKey, challenges: list[Challenge]
 ):
+    """Start the HTTP Challenge Server in another thread.
+
+    Parameters
+    ----------
+    key : ec.EllipticCurvePrivateKey
+        The private account key used for the ACME client.
+    challenges : list[Challenge]
+        The http-01 challenges to put on the HTTP server.
+    """
     # Set the tokens and account key globals in the server
     http_challenge_server.tokens = [
         challenge.additional["token"] for challenge in challenges
@@ -66,9 +77,32 @@ def start_http_challenge_server(
 
 
 def start_dns_challenge_server(
-    key: ec.EllipticCurvePrivateKey, challenges: list[Challenge]
+    key: ec.EllipticCurvePrivateKey, a_record: str, challenges: list[Challenge]
 ):
-    pass
+    """Start the DNS Challenge Server in a separate thread.
+
+    Parameters
+    ----------
+    key : ec.EllipticCurvePrivateKey
+        The private account key used by the ACME Client.
+    a_record : str
+        The value to respond with for any A record queries.
+    challenges : list[Challenge]
+        The dns-01 challenges to put on the TXT records.
+    """
+    # Set the tokens and account key globals in the server
+    dns_challenge_server.a_record = a_record
+    dns_challenge_server.tokens = [
+        challenge.additional["token"] for challenge in challenges
+    ]
+    dns_challenge_server.account_key = key
+    dns_challenge_thread = threading.Thread(
+        target=socketserver.UDPServer(
+            ("", 10053), dns_challenge_server.DNSServer
+        ).serve_forever,
+        daemon=True,
+    )
+    dns_challenge_thread.start()
 
 
 def main() -> None:
@@ -93,7 +127,7 @@ def main() -> None:
     if args.challenge_type == "http01":
         start_http_challenge_server(client.private_key, relevant_challenges)
     else:
-        start_dns_challenge_server(client.private_key, relevant_challenges)
+        start_dns_challenge_server(client.private_key, args.record, relevant_challenges)
 
     # At this point, we have deployed responses for at least one challenge for
     # every domain identifier. We can request each fulfilled challenge to be
