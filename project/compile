@@ -1,3 +1,9 @@
 #!/bin/bash
 
-echo "Compile your project here"
+python3 --version
+pip --version
+
+# Poetry Package Management
+pip install poetry
+
+poetry install
