@@ -32,9 +32,7 @@ def start_thread(
     logger.debug(f"server.tokens = {str(server.tokens)}")
 
     dns_challenge_thread = threading.Thread(
-        target=socketserver.ThreadingUDPServer(
-            ("", 10053), server.DNSServer
-        ).serve_forever,
+        target=socketserver.UDPServer(("", 10053), server.DNSServer).serve_forever,
         daemon=True,
     )
     dns_challenge_thread.start()
