@@ -29,7 +29,7 @@ class Endpoint(ABC):
         kid: Optional[str] = None,
         retry_limit: int = 2,
     ) -> Response:
-        logger.debug(f"Retrieving {self.method} {self.url}")
+        logger.debug(f"Retrieving {str(self)} {self.method} {self.url}")
         s = Session()
         if self.method == "POST":
             headers = self.headers | {

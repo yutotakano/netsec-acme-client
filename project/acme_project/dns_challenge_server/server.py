@@ -30,7 +30,7 @@ class DNSServer(socketserver.BaseRequestHandler):
             logger.debug(f"response_record = \n{response_record}")
             self.request[1].sendto(response_record.pack(), self.client_address)
         except DNSError:
-            logger.exception("Failed parsing DNS request record")
+            logger.exception("Failed parsing DNS request record: " + data.hex(" "))
 
     def _create_response(self, query_record: DNSRecord) -> DNSRecord:
         reply = query_record.reply()
