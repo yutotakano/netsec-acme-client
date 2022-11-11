@@ -1,11 +1,13 @@
 from dataclasses import dataclass
-from dataclasses import field
 
 from acme_project.acme_client.endpoint import Endpoint
 
 
 @dataclass
 class KeyChangeEndpoint(Endpoint):
-    url: str
-    method: str = field(default="GET", init=False)
-    headers: dict[str, str] = field(default_factory=dict, init=False)
+    method: str = "POST"
+    use_jwk: bool = False
+    use_kid: bool = True
+
+    def __init__(self, url: str):
+        self.url = url

@@ -1,11 +1,13 @@
 from dataclasses import dataclass
-from dataclasses import field
 
 from acme_project.acme_client.endpoint import Endpoint
 
 
 @dataclass
 class NewNonceEndpoint(Endpoint):
-    url: str
-    method: str = field(default="HEAD", init=False)
-    headers: dict[str, str] = field(default_factory=dict, init=False)
+    method: str = "HEAD"
+    use_jwk: bool = False
+    use_kid: bool = False
+
+    def __init__(self, url: str):
+        self.url = url
