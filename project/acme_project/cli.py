@@ -80,6 +80,7 @@ def main() -> None:
     dns_challenge_server.start_thread(
         client.private_key, args.record, relevant_challenges[parsed_arg_chal_type]
     )
+    dns_challenge_server.server_ready.wait()
 
     # Temporarily start the HTTP server.
     if args.challenge_type == "http01":

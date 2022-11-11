@@ -9,6 +9,14 @@ from acme_project.dns_challenge_server import server
 
 logger = logging.getLogger(__name__)
 
+server_ready = threading.Event()
+
+
+class FlaggingDNSServer(socketserver.UDPServer):
+    def server_activate(self) -> None:
+        server_ready.set()
+        return super().server_activate()
+
 
 def start_thread(
     key: ec.EllipticCurvePrivateKey, a_record: str, challenges: list[Challenge]
@@ -32,7 +40,7 @@ def start_thread(
     logger.debug(f"server.tokens = {str(server.tokens)}")
 
     dns_challenge_thread = threading.Thread(
-        target=socketserver.UDPServer(("", 10053), server.DNSServer).serve_forever,
+        target=FlaggingDNSServer(("", 10053), server.DNSServer).serve_forever,
         daemon=True,
     )
     dns_challenge_thread.start()

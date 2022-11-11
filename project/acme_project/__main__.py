@@ -19,12 +19,6 @@ dictConfig(
                 "formatter": "default",
             },
         },
-        "loggers": {
-            "werkzeug": {
-                "level": "DEBUG",
-                "handlers": ["stdout.handler"],
-            },
-        },
         "root": {"level": "DEBUG", "handlers": ["stdout.handler"]},
     }
 )
