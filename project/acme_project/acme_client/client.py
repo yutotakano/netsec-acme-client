@@ -282,7 +282,30 @@ class ACMEClient:
 
     def await_certificate(
         self, order_endpoint: GetOrderEndpoint
-    ) -> tuple[x509.Certificate, ec.EllipticCurvePrivateKey]:
+    ) -> tuple[x509.Certificate, ec.EllipticCurvePrivateKey, bytes]:
+        """Block and download the issued certificate when the order has changed
+        from processing to valid.
+
+        Parameters
+        ----------
+        order_endpoint : GetOrderEndpoint
+            The order to download the certificate for.
+
+        Returns
+        -------
+        tuple[x509.Certificate, ec.EllipticCurvePrivateKey, bytes]
+            A tuple of the leaf certificate, the leaf private key, and the full
+            PEM chain including the leaf.
+
+        Raises
+        ------
+        Exception
+            When the server failed to accept the CSR
+        Exception
+            When the order was invalidated after processing the CSR
+        Exception
+            When the order was validated but there was no certificate to download
+        """
         # Re-retrieve the Order endpoint, although we may have just received an
         # updated Order when we posted the CSR. This is to reduce coupling and
         # perhaps even allow the server to give time to issue the certificate.
@@ -298,11 +321,11 @@ class ACMEClient:
 
         if response.status_code != 200:
             logger.info(f"response.status_code = {response.status_code}")
-            raise Exception("Server failed to accept the CSR: " + response.text)
+            raise Exception("Couldn't get Order: " + response.text)
 
         order = Order.from_json(response.json())
 
-        while order.status == "processing":
+        if order.status == "processing":
             if "Retry-After" in response.headers:
                 wait_seconds = urllib3.Retry().parse_retry_after(
                     response.headers["Retry-After"]
@@ -337,7 +360,11 @@ class ACMEClient:
             nonce=self.last_replay_nonce,
             kid=self.account_endpoint.url,
         )
-        return (x509.load_pem_x509_certificate(response.content), self.certificate_key)
+        return (
+            x509.load_pem_x509_certificate(response.content),
+            self.certificate_key,
+            response.content,
+        )
 
     def revoke_certificate(self, cert: x509.Certificate):
         """Revoke the specified certificate.

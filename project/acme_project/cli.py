@@ -49,10 +49,20 @@ parser.add_argument(
     action="store_true",
     help="If present, immediately revoke the certificate after obtaining it. Regardless, the HTTPS server will start and used the obtained certificate.",
 )
+parser.add_argument(
+    "--log",
+    default="debug",
+    choices=["debug", "info", "warning", "error", "critical"],
+    help="The logging level to assign to the default standard output handler",
+)
 
 
 def main() -> None:
     args = parser.parse_args()
+
+    # Change the root log level
+    logging.getLogger().setLevel(args.log.upper())
+    logger.info(f"Log level set to {args.log.upper()}")
 
     client = ACMEClient(args.dir)
 
@@ -103,15 +113,15 @@ def main() -> None:
     client.request_certificate(order_endpoint)
 
     # Block and wait for the certificate chain PEM, then download it
-    (cert, cert_key) = client.await_certificate(order_endpoint)
+    (leaf_cert, leaf_key, pem_chain) = client.await_certificate(order_endpoint)
 
     with open("./https_cert.pem", "wb") as f:
-        f.write(cert.public_bytes(encoding=serialization.Encoding.PEM))
+        f.write(pem_chain)
         logger.debug("written certificate PEM to " + f.name)
 
     with open("./https_key.pem", "wb") as f:
         f.write(
-            cert_key.private_bytes(
+            leaf_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
                 encryption_algorithm=serialization.NoEncryption(),
@@ -121,7 +131,7 @@ def main() -> None:
 
     # If the revoke flag is set, immediately revoke it
     if args.revoke:
-        client.revoke_certificate(cert)
+        client.revoke_certificate(leaf_cert)
 
     # Start the main server in a separate thread. This allows us to wait for the
     # shutdown in the main thread and close the entire program together with all
