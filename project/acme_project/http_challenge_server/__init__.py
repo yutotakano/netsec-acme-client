@@ -1,9 +1,12 @@
+import logging
 import threading
 
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from acme_project.acme_client.challenge import Challenge
 from acme_project.http_challenge_server import server
+
+logger = logging.getLogger(__name__)
 
 
 def start_thread(key: ec.EllipticCurvePrivateKey, challenges: list[Challenge]):
@@ -19,6 +22,8 @@ def start_thread(key: ec.EllipticCurvePrivateKey, challenges: list[Challenge]):
     # Set the tokens and account key globals in the server
     server.tokens = [challenge.additional["token"] for challenge in challenges]
     server.account_key = key
+
+    logger.debug(f"server.tokens = {str(server.tokens)}")
 
     # Run the server in a separate thread, while we signal to the ACME server
     # and poll its responses.

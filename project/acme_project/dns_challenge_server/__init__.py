@@ -1,3 +1,4 @@
+import logging
 import socketserver
 import threading
 
@@ -5,6 +6,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 from acme_project.acme_client.challenge import Challenge
 from acme_project.dns_challenge_server import server
+
+logger = logging.getLogger(__name__)
 
 
 def start_thread(
@@ -25,6 +28,9 @@ def start_thread(
     server.a_record = a_record
     server.tokens = [challenge.additional["token"] for challenge in challenges]
     server.account_key = key
+
+    logger.debug(f"server.tokens = {str(server.tokens)}")
+
     dns_challenge_thread = threading.Thread(
         target=socketserver.ThreadingUDPServer(
             ("", 10053), server.DNSServer

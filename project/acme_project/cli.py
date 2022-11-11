@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import sys
 
@@ -10,6 +11,8 @@ from acme_project import https_server
 from acme_project import shutdown_server
 from acme_project.acme_client.challenge import Challenge
 from acme_project.acme_client.client import ACMEClient
+
+logger = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser(
     prog="Yuto Takano ACME Project",
@@ -50,6 +53,7 @@ parser.add_argument(
 
 def main() -> None:
     args = parser.parse_args()
+
     client = ACMEClient(args.dir)
 
     # Map the argument to the RFC-compatible challenge names
@@ -69,6 +73,7 @@ def main() -> None:
             for challenge in auth.challenges
             if challenge.type == chal_type
         ]
+    logger.debug("relevant_challenges = " + str(relevant_challenges))
 
     # Start the DNS server regardless of the challenge type, since Pebble needs
     # to resolve the DNS even for the http-01 challenge.
@@ -101,6 +106,7 @@ def main() -> None:
 
     with open("./https_cert.pem", "wb") as f:
         f.write(cert.public_bytes(encoding=serialization.Encoding.PEM))
+        logger.debug("written certificate PEM to " + f.name)
 
     with open("./https_key.pem", "wb") as f:
         f.write(
@@ -110,6 +116,7 @@ def main() -> None:
                 encryption_algorithm=serialization.NoEncryption(),
             )
         )
+        logger.debug("written certificate private key PEM to " + f.name)
 
     # If the revoke flag is set, immediately revoke it
     if args.revoke:

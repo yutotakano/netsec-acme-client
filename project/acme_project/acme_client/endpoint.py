@@ -1,4 +1,5 @@
 import json
+import logging
 from abc import ABC
 from typing import Optional
 
@@ -9,6 +10,8 @@ from requests import Session
 
 from acme_project.jws import create_flattened_jws
 from acme_project.jws import create_jwk
+
+logger = logging.getLogger(__name__)
 
 
 class Endpoint(ABC):
@@ -26,24 +29,20 @@ class Endpoint(ABC):
         kid: Optional[str] = None,
         retry_limit: int = 2,
     ) -> Response:
+        logger.debug(f"Retrieving {self.method} {self.url}")
         s = Session()
         if self.method == "POST":
-            req = Request(
-                self.method,
-                self.url,
-                headers=self.headers
-                | {
-                    "User-Agent": "takanoy-acme-project/1.0.0",
-                    "Content-Type": "application/jose+json",
-                },
-                data=self._create_base64_jws(payload, nonce, key, kid),
-            )
+            headers = self.headers | {
+                "User-Agent": "takanoy-acme-project/1.0.0",
+                "Content-Type": "application/jose+json",
+            }
+            post_data = self._create_base64_jws(payload, nonce, key, kid)
+            logger.debug(f"post_data = \n{post_data}")
         else:
-            req = Request(
-                self.method,
-                self.url,
-                headers=self.headers | {"User-Agent": "takanoy-acme-project/1.0.0"},
-            )
+            headers = self.headers | {"User-Agent": "takanoy-acme-project/1.0.0"}
+            post_data = None
+
+        req = Request(self.method, self.url, headers=headers, data=post_data)
         prepped = s.prepare_request(req)
         response = s.send(prepped, verify="./pebble.minica.pem")
 
@@ -54,6 +53,7 @@ class Endpoint(ABC):
             and response.json()["type"] == "urn:ietf:params:acme:error:badNonce"
             and retry_limit > 0
         ):
+            logger.debug(f"badNonce response, retry_limit = {retry_limit}")
             return self.retrieve(
                 key, payload, response.headers["Replay-Nonce"], kid, retry_limit - 1
             )

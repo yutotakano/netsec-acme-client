@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import logging
 from base64 import urlsafe_b64encode
 from time import sleep
 from typing import Any
@@ -21,6 +22,8 @@ from acme_project.acme_client.directory import DirectoryEndpoint
 from acme_project.acme_client.order import GetOrderEndpoint
 from acme_project.acme_client.order import Order
 from acme_project.acme_client.order import OrderStub
+
+logger = logging.getLogger(__name__)
 
 
 class ACMEClient:
@@ -118,6 +121,7 @@ class ACMEClient:
 
         # RFC Section 7.5.1 specifies it has to return 200
         if response.status_code != 200:
+            logger.info(f"response.status_code = {response.status_code}")
             raise Exception(
                 "Server failed to accept challenge response: " + response.text
             )
@@ -165,6 +169,7 @@ class ACMEClient:
             # headers automatically
             auth = self._retrieve_authorization(endpoint)
             while auth.status not in ["valid", "invalid"]:
+                logger.info(f"auth.status = {auth.status}, waiting 5 seconds")
                 # If there were no Retry-After headers or if the wait wasn't
                 # enough, wait 5 seconds which should be more than enough.
                 sleep(5)
@@ -193,7 +198,7 @@ class ACMEClient:
 
         if Order.from_json(response.json()).status != "ready":
             raise Exception(
-                "Order not ready despite all authorizations being valid...: "
+                "Order not ready despite all authorizations being valid: "
                 + response.text
             )
 
@@ -265,7 +270,7 @@ class ACMEClient:
                 + str(updated_order)
             )
         elif updated_order.status == "ready":
-            print("??? Server ignored our initial CSR, retrying...")
+            logger.info(f"Server ignored our initial CSR, retrying")
             return self.request_certificate(order_endpoint)
 
         # Valid order states at this point are 'processing', or 'valid'. The
@@ -292,17 +297,22 @@ class ACMEClient:
         self.last_replay_nonce = response.headers["Replay-Nonce"]
 
         if response.status_code != 200:
+            logger.info(f"response.status_code = {response.status_code}")
             raise Exception("Server failed to accept the CSR: " + response.text)
 
         order = Order.from_json(response.json())
 
         while order.status == "processing":
             if "Retry-After" in response.headers:
-                sleep(
-                    urllib3.Retry().parse_retry_after(response.headers["Retry-After"])
+                wait_seconds = urllib3.Retry().parse_retry_after(
+                    response.headers["Retry-After"]
                 )
             else:
-                sleep(5)
+                wait_seconds = 5
+            logger.info(
+                f"Waiting {wait_seconds} secs to retry order validation check {order_endpoint}"
+            )
+            sleep(wait_seconds)
             return self.await_certificate(order_endpoint)
 
         if order.status != "valid":
@@ -365,6 +375,7 @@ class ACMEClient:
         self.last_replay_nonce = response.headers["Replay-Nonce"]
 
         if response.status_code != 200:
+            logger.info(f"response.status_code = {response.status_code}")
             raise Exception("Server failed to revoke the certificate: " + response.text)
 
     def _retrieve_directory(self, dir_url: str) -> Directory:
@@ -440,6 +451,7 @@ class ACMEClient:
 
         # RFC Section 7.3.6 specifies it has to return 200 on success
         if response.status_code != 200:
+            logger.info(f"response.status_code = {response.status_code}")
             raise Exception("Server failed to deactivate account: " + response.text)
 
         return Account.from_json(response.json())
@@ -483,6 +495,7 @@ class ACMEClient:
 
         # RFC Section 7.4 specifies it has to return 201 on success
         if response.status_code != 201:
+            logger.info(f"response.status_code = {response.status_code}")
             raise Exception(
                 "Server was unwilling to issue an order for the requested certificate: "
                 + response.text
@@ -558,7 +571,9 @@ class ACMEClient:
             wait_seconds = urllib3.Retry().parse_retry_after(
                 response.headers["Retry-After"]
             )
-            print(f"Waiting {wait_seconds} seconds to retry Authorization endpoint...")
+            logger.info(
+                f"Waiting {wait_seconds} secs to retry Authorization {auth_endpoint}"
+            )
             sleep(wait_seconds)
             return self._retrieve_authorization(auth_endpoint=auth_endpoint)
 
