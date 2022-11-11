@@ -22,7 +22,7 @@ a_record: str
 
 class DNSServer(socketserver.BaseRequestHandler):
     def handle(self):
-        data: bytes = self.request[0].strip()
+        data: bytes = self.request[0]
         logger.debug(f"Received {len(data)} bytes")
         try:
             query_record: DNSRecord = DNSRecord.parse(data)
