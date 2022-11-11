@@ -1,3 +1,14 @@
+# -*- coding: utf-8 -*-
+"""This module contains the CLI functionality, and the flow invoking the various
+other components of this project.
+
+The main components of this project are:
+    acme_project.acme_client - The ACME client to interface with the ACME server
+    acme_project.dns_challenge_server - The DNS server to respond to dns-01
+    acme_project.http_challenge_server - The HTTP server to respond to http-01
+    acme_project.https_server - The HTTPS server to serve the acquired certificate
+    acme_project.shutdown_server - The server to respond to /shutdown
+"""
 import argparse
 import logging
 import os

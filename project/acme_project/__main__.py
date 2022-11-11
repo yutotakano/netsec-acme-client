@@ -1,14 +1,12 @@
 from logging.config import dictConfig
 
+# Set up default logging to stdout
 dictConfig(
     {
         "version": 1,
         "formatters": {
             "default": {
                 "format": "[%(asctime)s] %(levelname)s:%(name)s:%(module)s:%(funcName)s: %(message)s",
-            },
-            "fullmodule": {
-                "format": "[%(asctime)s] %(levelname)s:%(name)s:%(filename)s:%(funcName)s: %(message)s",
             },
         },
         "handlers": {
